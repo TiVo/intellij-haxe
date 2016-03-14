@@ -15,10 +15,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.intellij.plugins.haxe.model.type;
+package com.intellij.plugins.haxe.model.fixer;
 
-public class HaxeCannotUnifyException extends Exception {
-  public HaxeCannotUnifyException() {
-    super("Cannot unify");
+import com.intellij.plugins.haxe.model.HaxeDocumentModel;
+import com.intellij.psi.PsiElement;
+import org.jetbrains.annotations.NotNull;
+
+public class AddSemicolonFixer extends HaxeFixer {
+  @NotNull
+  private final PsiElement element;
+
+  public AddSemicolonFixer(@NotNull PsiElement element) {
+    super("Add semicolon");
+    this.element = element;
+  }
+
+  @Override
+  public void run() {
+    HaxeDocumentModel.fromElement(element).addTextAfterElement(element, ";");
   }
 }

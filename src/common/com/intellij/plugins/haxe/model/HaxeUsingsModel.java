@@ -15,18 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.intellij.plugins.haxe.model.fixer;
+package com.intellij.plugins.haxe.model;
 
-import com.intellij.plugins.haxe.lang.psi.HaxeReferenceExpression;
+import com.intellij.plugins.haxe.lang.psi.HaxeUsingStatement;
 import com.intellij.psi.PsiElement;
+import org.jetbrains.annotations.NotNull;
 
-public class HaxeCreateMethodFixer extends HaxeFixer {
-  public HaxeCreateMethodFixer(String name, PsiElement context) {
-    super("Create method");
+import java.util.ArrayList;
+import java.util.List;
+
+public class HaxeUsingsModel {
+  private HaxeFileModel file;
+
+  public HaxeUsingsModel(HaxeFileModel file) {
+    this.file = file;
   }
 
-  @Override
-  public void run() {
-    // @TODO: Stub. Implement.
+  @NotNull public List<HaxeUsingModel> getUsings() {
+    final ArrayList<HaxeUsingModel> models = new ArrayList<HaxeUsingModel>();
+    for (PsiElement element : file.file.getChildren()) {
+      if (element instanceof HaxeUsingStatement) {
+        models.add(new HaxeUsingModel((HaxeUsingStatement)element));
+      }
+    }
+
+    return models;
   }
 }

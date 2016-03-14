@@ -23,6 +23,7 @@ import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class SpecificFunctionReference extends SpecificTypeReference {
@@ -95,5 +96,29 @@ public class SpecificFunctionReference extends SpecificTypeReference {
   @Override
   public String toStringWithoutConstant() {
     return toString();
+  }
+
+  @Override
+  public void applyGenerics(HaxeGenericResolver generic) {
+    for (int i = 0; i < params.size(); i++) {
+      ResultHolder param = params.get(i);
+      if (!param.isUnknown()) {
+        final ResultHolder result = generic.resolve(param);
+        if (result != null) {
+          params.set(i, result.isUnknown() ? result : result.duplicate());
+        }
+      }
+    }
+  }
+
+  @Override
+  public SpecificTypeReference duplicate() {
+    if (isUnknown()) return this;
+    final ArrayList<ResultHolder> params = new ArrayList<ResultHolder>();
+    for (ResultHolder param : this.params) {
+      params.add(param.duplicate());
+    }
+    ResultHolder retval = this.retval.duplicate();
+    return new SpecificFunctionReference(params, retval, method, context);
   }
 }

@@ -15,13 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.intellij.plugins.haxe.model;
+package com.intellij.plugins.haxe.model.resolver;
 
-public enum HaxeMethodContext {
-  EXTENSION,
-  NO_EXTENSION;
+import com.intellij.plugins.haxe.model.type.ResultHolder;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-  public boolean isExtensionMethod() {
-    return this == EXTENSION;
+import java.util.Map;
+
+public class HaxeResolver2Dummy extends HaxeResolver2 {
+  @Nullable
+  @Override
+  public ResultHolder get(String key) {
+    return null;
+  }
+
+  @Override
+  public void addResults(@NotNull Map<String, ResultHolder> results) {
+  }
+
+  @Override
+  public boolean isInStaticContext() {
+    return false;
   }
 }

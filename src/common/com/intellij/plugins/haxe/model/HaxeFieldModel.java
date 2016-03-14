@@ -18,8 +18,8 @@
 package com.intellij.plugins.haxe.model;
 
 import com.intellij.plugins.haxe.lang.psi.*;
+import com.intellij.plugins.haxe.model.type.ResultHolder;
 import com.intellij.plugins.haxe.util.UsefulPsiTreeUtil;
-import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -33,11 +33,6 @@ public class HaxeFieldModel extends HaxeMemberModel {
     this.element = element;
   }
 
-  @Override
-  public PsiElement getPsi() {
-    return element;
-  }
-
   public HaxeVarDeclaration getFieldPsi() {
     return element;
   }
@@ -47,13 +42,9 @@ public class HaxeFieldModel extends HaxeMemberModel {
     return element.getVarDeclarationPart();
   }
 
-  private HaxeClassModel _declaringClass = null;
-  public HaxeClassModel getDeclaringClass() {
-    if (_declaringClass == null) {
-      HaxeClass aClass = (HaxeClass)this.element.getContainingClass();
-      _declaringClass = (aClass != null) ? aClass.getModel() : null;
-    }
-    return _declaringClass;
+  @Override
+  public ResultHolder getMemberType() {
+    return getResultType();
   }
 
   @Nullable
@@ -106,18 +97,26 @@ public class HaxeFieldModel extends HaxeMemberModel {
     return isRealVar() || this.getSetterType().isAllowedFromInside();
   }
 
+  public String getGetterMethodName() {
+    return "get_" + this.getName();
+  }
+
+  public String getSetterMethodName() {
+    return "set_" + this.getName();
+  }
+
   public HaxeMethodModel getGetterMethod() {
     if (getGetterType() != HaxeAccessorType.GET) return null;
-    return this.getDeclaringClass().getMethod("get_" + this.getName());
+    return this.getDeclaringClass().getMethod(getGetterMethodName());
   }
 
   public HaxeMethodModel getSetterMethod() {
-    if (getGetterType() != HaxeAccessorType.SET) return null;
-    return this.getDeclaringClass().getMethod("set_" + this.getName());
+    if (getSetterType() != HaxeAccessorType.SET) return null;
+    return this.getDeclaringClass().getMethod(getSetterMethodName());
   }
 
   public boolean isRealVar() {
-    if (this.getModifiers().hasModifier(HaxeModifierType.IS_VAR)) return true;
+    if (this.getModifiers().hasModifier(HaxeExtraModifiers.IS_VAR)) return true;
     if (!isProperty()) return true;
     if (getSetterType() == HaxeAccessorType.NULL || getSetterType() == HaxeAccessorType.DEFAULT) {
       return true;

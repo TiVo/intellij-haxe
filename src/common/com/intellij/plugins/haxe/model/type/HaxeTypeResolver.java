@@ -21,6 +21,14 @@ import com.intellij.lang.annotation.AnnotationHolder;
 import com.intellij.plugins.haxe.lang.psi.*;
 import com.intellij.plugins.haxe.lang.psi.impl.AbstractHaxeNamedComponent;
 import com.intellij.plugins.haxe.lang.psi.impl.HaxeMethodImpl;
+import com.intellij.plugins.haxe.model.HaxeFileModel;
+import com.intellij.plugins.haxe.model.HaxeMethodModel;
+import com.intellij.plugins.haxe.model.HaxeTypesModel;
+import com.intellij.plugins.haxe.model.fixer.HaxeCastFixer;
+import com.intellij.plugins.haxe.model.fixer.HaxeRemoveFixer;
+import com.intellij.plugins.haxe.model.fixer.HaxeTypeTagRemoveFixer;
+import com.intellij.plugins.haxe.model.resolver.HaxeResolver2;
+import com.intellij.plugins.haxe.model.resolver.HaxeResolver2Dummy;
 import com.intellij.plugins.haxe.util.HaxeAbstractEnumUtil;
 import com.intellij.plugins.haxe.util.UsefulPsiTreeUtil;
 import com.intellij.psi.*;
@@ -87,12 +95,21 @@ public class HaxeTypeResolver {
     }
 
     if (comp instanceof HaxeVarDeclarationPart) {
+      HaxeTypeTag typeTag = ((HaxeVarDeclarationPart)comp).getTypeTag();
+      if (typeTag != null) {
+        return getTypeFromTypeTag(typeTag, comp);
+      }
       ResultHolder result = null;
 
       HaxeVarInit init = ((HaxeVarDeclarationPart)comp).getVarInit();
       if (init != null) {
         PsiElement child = init.getExpression();
-        final ResultHolder initType = HaxeTypeResolver.getPsiElementType(child);
+
+        //ResultHolder type1 = HaxeTypeResolver.getPsiElementType(child, new HaxeResolver2Dummy());
+        // @TODO: resolver should be calculated (if var has static modifier)
+
+        final ResultHolder initType = HaxeTypeResolver.getPsiElementType(child, new HaxeResolver2Dummy());
+
         HaxeVarDeclaration decl = ((HaxeVarDeclaration)comp.getParent());
         boolean isConstant = false;
         if (decl != null) {
@@ -101,7 +118,6 @@ public class HaxeTypeResolver {
         result = isConstant ? initType : initType.withConstantValue(null);
       }
 
-      HaxeTypeTag typeTag = ((HaxeVarDeclarationPart)comp).getTypeTag();
       if (typeTag != null) {
         final ResultHolder typeFromTag = getTypeFromTypeTag(typeTag, comp);
         final Object initConstant = result != null ? result.getType().getConstant() : null;
@@ -118,21 +134,27 @@ public class HaxeTypeResolver {
 
   @NotNull
   static private ResultHolder getFunctionReturnType(AbstractHaxeNamedComponent comp) {
-    if (comp instanceof HaxeMethodImpl) {
-      HaxeTypeTag typeTag = ((HaxeMethodImpl)comp).getTypeTag();
-      if (typeTag != null) {
-        return getTypeFromTypeTag(typeTag, comp);
+    if (comp != null) {
+      if (comp instanceof HaxeMethodImpl) {
+        HaxeTypeTag typeTag = ((HaxeMethodImpl)comp).getTypeTag();
+        if (typeTag != null) {
+          return getTypeFromTypeTag(typeTag, comp);
+        }
+      }
+
+      final HaxeFileModel file = HaxeFileModel.fromElement(comp);
+
+      if (comp instanceof HaxeMethod) {
+        HaxeMethodModel methodModel = ((HaxeMethod)comp).getModel();
+        final HaxeExpressionEvaluatorContext context = getPsiElementType(methodModel.getBodyPsi(), null, methodModel.getResolver(file));
+        return context.getReturnType();
+      } else if (comp instanceof HaxeFunctionLiteral) {
+        final HaxeExpressionEvaluatorContext context = getPsiElementType(comp.getLastChild(), null, ((HaxeFunctionLiteral)comp).getModel().getResolver(file));
+        return context.getReturnType();
       }
     }
-    if (comp instanceof HaxeMethod) {
-      final HaxeExpressionEvaluatorContext context = getPsiElementType(((HaxeMethod)comp).getModel().getBodyPsi(), null);
-      return context.getReturnType();
-    } else if (comp instanceof HaxeFunctionLiteral) {
-      final HaxeExpressionEvaluatorContext context = getPsiElementType(comp.getLastChild(), null);
-      return context.getReturnType();
-    } else {
-      throw new RuntimeException("Can't get the body of a no PsiMethod");
-    }
+
+    throw new RuntimeException("Can't get the body of a no PsiMethod");
   }
 
   @NotNull
@@ -162,12 +184,16 @@ public class HaxeTypeResolver {
 
   @NotNull
   static public ResultHolder getTypeFromFunctionType(HaxeFunctionType type) {
+    // @TODO: This is messy, should be refactored
     ArrayList<ResultHolder> args = new ArrayList<ResultHolder>();
     for (HaxeTypeOrAnonymous anonymous : type.getTypeOrAnonymousList()) {
       args.add(getTypeFromTypeOrAnonymous(anonymous));
     }
     ResultHolder retval = args.get(args.size() - 1);
     args.remove(args.size() - 1);
+    if (args.size() == 1 && args.get(0).getType().toStringWithoutConstant().equals("Void")) {
+      args.clear();
+    }
     return new SpecificFunctionReference(args, retval, null, type).createHolder();
   }
 
@@ -197,12 +223,12 @@ public class HaxeTypeResolver {
     if (type != null) {
       return getTypeFromType(type);
     }
-    return SpecificTypeReference.getDynamic(typeOrAnonymous).createHolder();
+    return HaxeTypesModel.fromElement(typeOrAnonymous).DYNAMIC.createHolder();
   }
 
   @NotNull
-  static public ResultHolder getPsiElementType(PsiElement element) {
-    return getPsiElementType(element, null).result;
+  static public ResultHolder getPsiElementType(PsiElement element, @NotNull HaxeResolver2 resolver) {
+    return getPsiElementType(element, null, resolver).result;
   }
 
   // @TODO: hack to avoid stack overflow, until a proper non-static fix is done
@@ -212,30 +238,45 @@ public class HaxeTypeResolver {
     //final ResultHolder retval = context.getReturnType();
 
     if (!(element instanceof HaxeMethod)) return;
-    final HaxeTypeTag typeTag = UsefulPsiTreeUtil.getChild(element, HaxeTypeTag.class);
-    ResultHolder expectedType = SpecificTypeReference.getDynamic(element).createHolder();
+    final HaxeMethodModel method = ((HaxeMethod)element).getModel();
+    final HaxeTypeTag typeTag = method.getReturnTypeTagPsi();
+    ResultHolder typeTagType = null;
+    ResultHolder expectedType = context.types.DYNAMIC.createHolder();
+    final List<ResultHolder> returnValues = context.getReturnValues();
     if (typeTag == null) {
-      final List<ReturnInfo> infos = context.getReturnInfos();
-      if (!infos.isEmpty()) {
-        expectedType = infos.get(0).type;
+      if (!returnValues.isEmpty()) {
+        expectedType = returnValues.get(0);
       }
     } else {
-      expectedType = getTypeFromTypeTag(typeTag, element);
+      expectedType = typeTagType = getTypeFromTypeTag(typeTag, element);
     }
 
     if (expectedType == null) return;
-    for (ReturnInfo retinfo : context.getReturnInfos()) {
-      if (expectedType.canAssign(retinfo.type)) continue;
+
+    if (typeTagType != null && !typeTagType.getType().isVoid() && (returnValues.size() == 0)) {
       context.addError(
-        retinfo.element,
-        "Can't return " + retinfo.type + ", expected " + expectedType.toStringWithoutConstant()
+        method.getReturnTypeTagOrNameOrBasePsi(),
+        "Expected returning " + typeTagType,
+        new HaxeTypeTagRemoveFixer(typeTag)
       );
+    }
+
+    for (ResultHolder retinfo : returnValues) {
+      if (expectedType.canAssign(retinfo)) continue;
+      HaxeReturnStatement returnStatment = (HaxeReturnStatement)retinfo.element;
+      if (returnStatment != null) {
+        context.addError(
+          returnStatment,
+          "Can't return " + retinfo + ", expected " + expectedType.toStringWithoutConstant(),
+          new HaxeCastFixer(returnStatment.getExpression(), retinfo.getType(), expectedType.getType())
+        );
+      }
     }
   }
 
   @NotNull
-  static public HaxeExpressionEvaluatorContext getPsiElementType(PsiElement element, @Nullable AnnotationHolder holder) {
-    return evaluateFunction(new HaxeExpressionEvaluatorContext(element, holder));
+  static public HaxeExpressionEvaluatorContext getPsiElementType(PsiElement element, @Nullable AnnotationHolder holder, HaxeResolver2 resolver) {
+    return evaluateFunction(new HaxeExpressionEvaluatorContext(element, resolver, holder));
   }
 
   @NotNull
@@ -251,8 +292,9 @@ public class HaxeTypeResolver {
       HaxeExpressionEvaluator.evaluate(element, context);
       checkMethod(element.getParent(), context);
 
-      for (HaxeExpressionEvaluatorContext lambda : context.lambdas) {
-        evaluateFunction(lambda);
+      for (HaxeExpressionEvaluatorContext lambdaContext : context.lambdas) {
+        evaluateFunction(lambdaContext);
+        lambdaContext.functionType.canAssign(lambdaContext.getReturnType());
       }
 
       return context;

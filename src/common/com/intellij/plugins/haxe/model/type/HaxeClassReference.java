@@ -22,6 +22,7 @@ import com.intellij.plugins.haxe.model.HaxeClassModel;
 import com.intellij.plugins.haxe.util.HaxeResolveUtil;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class HaxeClassReference {
   final public String name;
@@ -40,16 +41,23 @@ public class HaxeClassReference {
     this.clazz = clazz;
   }
 
+  @Nullable
   public HaxeClass getHaxeClass() {
     if (this.clazz != null) return this.clazz.getPsi();
     HaxeClass clazz = HaxeResolveUtil.findClassByQName(name, elementContext);
     if (clazz == null) {
       clazz = HaxeResolveUtil.tryResolveClassByQName(elementContext);
       if (clazz == null) {
-        System.err.println("Not found '" + name + "' : " + elementContext + " : " + elementContext.getText());
+        System.err.println("Not found '" + name + "' : " + elementContext);
       }
     }
     return clazz;
+  }
+
+  @Nullable
+  public HaxeClassModel getHaxeClassModel() {
+    final HaxeClass aClass = getHaxeClass();
+    return (aClass != null) ? aClass.getModel() : null;
   }
 
   public String getName() {

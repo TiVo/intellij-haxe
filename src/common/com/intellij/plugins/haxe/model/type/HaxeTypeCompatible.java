@@ -32,10 +32,12 @@ import java.util.HashSet;
 import java.util.List;
 
 public class HaxeTypeCompatible {
+  /*
   static public boolean canApplyBinaryOperator(SpecificTypeReference left, SpecificTypeReference right, String operator) {
     // @TODO: Stub. Implement.
     return true;
   }
+  */
 
   static public boolean canAssignToFrom(SpecificTypeReference to, ResultHolder from) {
     return canAssignToFrom(to, from.getType());
@@ -43,9 +45,11 @@ public class HaxeTypeCompatible {
 
   static public boolean canAssignToFrom(ResultHolder to, ResultHolder from) {
     if (to.isUnknown()) {
+      //System.out.println("Unknown holder to change: " + System.identityHashCode(to) + " <- " + from.getType().withoutConstantValue());
       to.setType(from.getType().withoutConstantValue());
     }
     else if (from.isUnknown()) {
+      //System.out.println("Unknown holder from change: " + System.identityHashCode(to) + " <- " + to.getType().withoutConstantValue());
       from.setType(to.getType().withoutConstantValue());
     }
     return canAssignToFrom(to.getType(), from.getType());
@@ -117,8 +121,8 @@ public class HaxeTypeCompatible {
     HaxeClass thisClassPsi = to.clazz.getHaxeClass();
     if (thisClassPsi != null) {
       HaxeClassModel thisClass = thisClassPsi.getModel();
-      for (HaxeType type : thisClass.getAbstractFromList()) {
-        if (HaxeTypeResolver.getTypeFromType(type).toStringWithoutConstant().equals(from.toStringWithoutConstant())) {
+      for (ResultHolder type : thisClass.getAbstractFromList()) {
+        if (type.toStringWithoutConstant().equals(from.toStringWithoutConstant())) {
           return true;
         }
       }
@@ -130,7 +134,6 @@ public class HaxeTypeCompatible {
       HaxeClassModel thatClass = thatClassPsi.getModel();
 
       if (thatClass.isAbstract()) {
-
         // Check if this is required!
         HaxeTypeOrAnonymous underlyingAbstractType = thatClass.getAbstractUnderlyingType();
         if (underlyingAbstractType != null) {
@@ -140,8 +143,8 @@ public class HaxeTypeCompatible {
           }
         }
 
-        for (HaxeType type : thatClass.getAbstractToList()) {
-          if (to.canAssign(HaxeTypeResolver.getTypeFromType(type))) {
+        for (ResultHolder type : thatClass.getAbstractToList()) {
+          if (to.canAssign(type)) {
             return true;
           }
         }

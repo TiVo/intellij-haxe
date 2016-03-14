@@ -20,7 +20,9 @@ package com.intellij.plugins.haxe.model.type;
 import com.intellij.plugins.haxe.lang.psi.HaxeClass;
 import com.intellij.plugins.haxe.lang.psi.impl.AbstractHaxeNamedComponent;
 import com.intellij.plugins.haxe.model.HaxeClassModel;
+import com.intellij.plugins.haxe.model.HaxeFileModel;
 import com.intellij.plugins.haxe.model.HaxeGenericParamModel;
+import com.intellij.plugins.haxe.model.HaxeMemberModel;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -58,9 +60,9 @@ public class SpecificHaxeClassReference extends SpecificTypeReference {
     return this.clazz.getHaxeClass();
   }
 
+  @Nullable
   public HaxeClassModel getHaxeClassModel() {
     final HaxeClass aClass = getHaxeClass();
-    ;
     return (aClass != null) ? aClass.getModel() : null;
   }
 
@@ -98,7 +100,13 @@ public class SpecificHaxeClassReference extends SpecificTypeReference {
     return new SpecificHaxeClassReference(clazz, ResultHolder.EMPTY, constantValue, null, clazz.elementContext);
   }
 
+  /*
   static public SpecificHaxeClassReference withGenerics(@NotNull HaxeClassReference clazz, ResultHolder[] specifics) {
+    return new SpecificHaxeClassReference(clazz, specifics, null, null, clazz.elementContext);
+  }
+  */
+
+  static public SpecificHaxeClassReference withGenerics(@NotNull HaxeClassReference clazz, ResultHolder... specifics) {
     return new SpecificHaxeClassReference(clazz, specifics, null, null, clazz.elementContext);
   }
 
@@ -140,7 +148,6 @@ public class SpecificHaxeClassReference extends SpecificTypeReference {
 
   @Override
   public String toString() {
-    //return toStringWithoutConstant();
     return toStringWithConstant();
   }
 
@@ -160,26 +167,65 @@ public class SpecificHaxeClassReference extends SpecificTypeReference {
 
   @Nullable
   @Override
-  public ResultHolder access(String name, HaxeExpressionEvaluatorContext context) {
+  public ResultHolder access(String name, @Nullable PsiElement accessElement, HaxeExpressionEvaluatorContext context, boolean isStatic) {
+    // @TODO: Use HaxeResolver2
     if (this.isDynamic()) return this.withoutConstantValue().createHolder();
 
     if (name == null) {
       return null;
     }
-    HaxeClass aClass = this.clazz.getHaxeClass();
-    if (aClass == null) {
+
+    if (this.isClass()) {
+      final SpecificTypeReference type = this.specifics[0].getType();
+      return type.access(name, accessElement, context, true);
+    }
+
+    final HaxeClassModel clazz = this.clazz.getHaxeClassModel();
+    if (clazz == null) {
       return null;
     }
-    AbstractHaxeNamedComponent field = (AbstractHaxeNamedComponent)aClass.findHaxeFieldByName(name);
-    AbstractHaxeNamedComponent method = (AbstractHaxeNamedComponent)aClass.findHaxeMethodByName(name);
-    if (method != null) {
-      if (context.root == method) return null;
-      return HaxeTypeResolver.getMethodFunctionType(method, getGenericResolver());
+
+    final HaxeMemberModel member = clazz.getMemberWithFileContext(
+      name,
+      HaxeFileModel.fromElement(context.root)
+    );
+
+    if (member != null) {
+      if (isStatic && !member.isStatic()) {
+        context.addError(accessElement, "Access in static context");
+      } else if (!isStatic && member.isStatic()) {
+        context.addError(accessElement, "Access in non static context");
+      }
+
+      // @TODO: Duplicate just in this generic so Unknown works
+      final ResultHolder type = member.getMemberType().duplicate();
+      //final ResultHolder type = member.getMemberType();
+      final ResultHolder holder = type.applySpecifics(getGenericResolver());
+      return holder;
+    } else {
+      return null;
     }
-    if (field != null) {
-      if (context.root == field) return null;
-      return HaxeTypeResolver.getFieldOrMethodReturnType(field, getGenericResolver());
+  }
+
+  @Override
+  public void applyGenerics(HaxeGenericResolver generic) {
+    for (int i = 0; i < specifics.length; i++) {
+      ResultHolder specific = specifics[i];
+      if (!specific.isUnknown()) {
+        final ResultHolder result = generic.resolve(specific);
+        if (result != null) {
+          specifics[i] = result.isUnknown() ? result : result.duplicate();
+        }
+      }
     }
-    return null;
+  }
+
+  @Override
+  public SpecificTypeReference duplicate() {
+    final ResultHolder[] specifics = new ResultHolder[this.specifics.length];
+    for (int n = 0; n < specifics.length; n++) {
+      specifics[n] = this.specifics[n].duplicate();
+    }
+    return new SpecificHaxeClassReference(clazz, specifics, constantValue, rangeConstraint, context);
   }
 }

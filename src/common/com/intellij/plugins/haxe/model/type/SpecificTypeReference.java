@@ -17,6 +17,7 @@
  */
 package com.intellij.plugins.haxe.model.type;
 
+import com.intellij.plugins.haxe.model.HaxeTypesModel;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -37,24 +38,12 @@ public abstract class SpecificTypeReference {
     return this;
   }
 
-  static public SpecificHaxeClassReference getVoid(@NotNull PsiElement context) {
-    return primitive("Void", context);
+  static public SpecificHaxeClassReference getString(@NotNull PsiElement context) {
+    return primitive("String", context);
   }
 
-  static public SpecificHaxeClassReference getBool(@NotNull PsiElement context) {
-    return primitive("Bool", context);
-  }
-
-  static public SpecificHaxeClassReference getInt(@NotNull PsiElement context) {
-    return primitive("Int", context);
-  }
-
-  static public SpecificHaxeClassReference getInt(@NotNull PsiElement context, int value) {
-    return primitive("Int", context, value);
-  }
-
-  static public SpecificHaxeClassReference getDynamic(@NotNull PsiElement context) {
-    return primitive("Dynamic", context);
+  static public SpecificHaxeClassReference getClass(@NotNull PsiElement context) {
+    return primitive("Class", context);
   }
 
   static public SpecificHaxeClassReference getUnknown(@NotNull PsiElement context) {
@@ -122,20 +111,20 @@ public abstract class SpecificTypeReference {
     return false;
   }
 
+  final public boolean isClass() {
+    if (this instanceof SpecificHaxeClassReference) {
+      final SpecificHaxeClassReference reference = (SpecificHaxeClassReference)this;
+      return reference.clazz.getName().equals("Class");
+    }
+    return false;
+  }
+
   final public ResultHolder getArrayElementType() {
     if (isArray()) {
       final ResultHolder[] specifics = ((SpecificHaxeClassReference)this).specifics;
       if (specifics.length >= 1) return specifics[0];
     }
     return getUnknown(context).createHolder();
-  }
-
-  final public ResultHolder getIterableElementType(SpecificTypeReference iterable) {
-    if (isArray()) {
-      return getArrayElementType();
-    }
-    // @TODO: Must implement it (it is not int always)
-    return getInt(iterable.getElementContext()).createHolder();
   }
 
   abstract public SpecificTypeReference withConstantValue(Object constantValue);
@@ -185,7 +174,12 @@ public abstract class SpecificTypeReference {
   }
 
   @Nullable
-  public ResultHolder access(String name, HaxeExpressionEvaluatorContext context) {
+  final public ResultHolder access(String name, PsiElement accessElement, HaxeExpressionEvaluatorContext context) {
+    return access(name, accessElement, context, false);
+  }
+
+  @Nullable
+  public ResultHolder access(String name, @Nullable PsiElement accessElement, HaxeExpressionEvaluatorContext context, boolean isStatic) {
     return null;
   }
 
@@ -200,4 +194,38 @@ public abstract class SpecificTypeReference {
   public ResultHolder createHolder() {
     return new ResultHolder(this);
   }
+
+  @NotNull
+  final public ResultHolder getIterableElementType(@NotNull HaxeExpressionEvaluatorContext context) {
+    final ResultHolder iterator = this.access("iterator", null, context);
+    if (iterator != null) {
+      final SpecificFunctionReference iteratorFunc = iterator.getFunctionType();
+      if (iteratorFunc != null) {
+        final ResultHolder iteratorReturnType = iteratorFunc.getReturnType();
+        return iteratorReturnType.getType().getIterableElementType(context);
+      }
+    }
+    final ResultHolder iteratorNextType = access("next", null, context);
+    if (iteratorNextType != null) {
+      final SpecificFunctionReference type = iteratorNextType.getFunctionType();
+      if (type != null) {
+        final ResultHolder returnType = type.getReturnType();
+        return returnType;
+      }
+    }
+    return context.types.DYNAMIC.createHolder();
+  }
+
+  @NotNull
+  final public boolean isIterable(@NotNull HaxeExpressionEvaluatorContext context) {
+    if (this.access("iterator", null, context) != null) return true;
+    if ((this.access("next", null, context) != null) && (this.access("hasNext", null, context) != null)) return true;
+    return false;
+  }
+
+  public void applyGenerics(HaxeGenericResolver generic) {
+
+  }
+
+  public abstract SpecificTypeReference duplicate();
 }

@@ -17,6 +17,7 @@
  */
 package com.intellij.plugins.haxe.model.type;
 
+import com.intellij.plugins.haxe.model.HaxeTypesModel;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -33,8 +34,23 @@ public class ResultHolder {
   private boolean canMutate = true;
   private int mutationCount = 0;
 
+  @Nullable
+  public PsiElement element = null;
+
+  @Nullable
+  public String name;
+
   public ResultHolder(@NotNull SpecificTypeReference type) {
     this.type = type;
+    check(false);
+  }
+
+  private void check(boolean type) {
+    /*
+    if (isUnknown()) {
+      System.out.println("Holder set to unknown (" + type + "): " + System.identityHashCode(this));
+    }
+    */
   }
 
   @NotNull
@@ -57,11 +73,17 @@ public class ResultHolder {
   }
 
   public ResultHolder setType(@Nullable SpecificTypeReference type) {
+    return setType(type, null);
+  }
+
+  public ResultHolder setType(@Nullable SpecificTypeReference type, @Nullable PsiElement element) {
     if (type == null) {
-      type = SpecificTypeReference.getDynamic(this.type.getElementContext());
+      type = HaxeTypesModel.fromElement(this.getElementContext()).DYNAMIC;
     }
     this.type = type;
+    this.element = element;
     mutationCount++;
+    check(true);
     return this;
   }
 
@@ -95,7 +117,7 @@ public class ResultHolder {
   }
 
   public void removeConstant() {
-    setType(getType().withoutConstantValue());
+    setType(getType().withoutConstantValue(), null);
   }
 
   public String toString() {
@@ -106,16 +128,46 @@ public class ResultHolder {
     return this.getType().toStringWithoutConstant();
   }
 
+  public String toStringWithConstant(boolean withConstant) {
+    if (withConstant) {
+      return this.getType().toStringWithConstant();
+    } else {
+      return this.getType().toStringWithoutConstant();
+    }
+  }
+
   public ResultHolder duplicate() {
-    return new ResultHolder(this.getType());
+    // Don't duplicate unknown holders
+    return isUnknown() ? this : new ResultHolder(this.getType().duplicate());
   }
 
   public ResultHolder withConstantValue(Object constantValue) {
-    return duplicate().setType(getType().withConstantValue(constantValue));
+    return duplicate().setType(getType().withConstantValue(constantValue), null);
   }
 
+  public ResultHolder withoutConstantValue() {
+    return withConstantValue(null);
+  }
+
+  public Object getConstant() {
+    return getType().getConstant();
+  }
 
   public PsiElement getElementContext() {
     return type.getElementContext();
+  }
+
+  public ResultHolder applySpecifics(HaxeGenericResolver generic) {
+    if (this.isUnknown()) return this;
+    final ResultHolder result = generic.resolve(this.toStringWithoutConstant());
+    if (result != null) {
+      if (result.isUnknown() || result.getType().isUnknown()) {
+        System.out.println("Nope!");
+      }
+      this.setType(result.getType());
+    } else {
+      getType().applyGenerics(generic);
+    }
+    return this;
   }
 }

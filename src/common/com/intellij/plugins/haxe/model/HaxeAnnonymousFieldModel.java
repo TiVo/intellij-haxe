@@ -17,41 +17,23 @@
  */
 package com.intellij.plugins.haxe.model;
 
-public enum HaxeModifierType {
-  OVERRIDE("override"),
-  STATIC("static"),
-  PUBLIC("public"),
-  PRIVATE("private"),
-  EMPTY(""),
-  INLINE("inline"),
-  FINAL("@:final"),
-  IS_VAR("@:isVar"),
-  DEPRECATED("@:deprecated");
+import com.intellij.plugins.haxe.lang.psi.HaxeAnonymousTypeField;
+import com.intellij.plugins.haxe.model.type.HaxeTypeResolver;
+import com.intellij.plugins.haxe.model.type.ResultHolder;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiMember;
+import org.jetbrains.annotations.NotNull;
 
+public class HaxeAnnonymousFieldModel extends HaxeMemberModel {
+  @NotNull private HaxeAnonymousTypeField element;
 
-  public String s;
-
-  HaxeModifierType(String s) {
-    this.s = s;
+  public HaxeAnnonymousFieldModel(@NotNull HaxeAnonymousTypeField element) {
+    super(element, element, element);
+    this.element = element;
   }
 
-  public String getStringWithSpace() {
-    return (this.s.length() == 0) ? "" : (this.s + " ");
-  }
-
-  public int getVisibilityValue() {
-    switch (this) {
-      case PUBLIC:
-        return 1;
-      case PRIVATE:
-        return 0;
-      case EMPTY:
-        return 0;
-    }
-    return -1;
-  }
-
-  public boolean hasLowerVisibilityThan(HaxeModifierType that) {
-    return this.getVisibilityValue() < that.getVisibilityValue();
+  @Override
+  public ResultHolder getMemberType() {
+    return HaxeTypeResolver.getTypeFromTypeTag(element.getTypeTag(), element);
   }
 }
