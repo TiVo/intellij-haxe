@@ -200,7 +200,7 @@ public class HaxeFileModel implements HaxeExposableModel {
 
     if (result != null) {
       HaxeModel model = result.resolve(getFullyQualifiedInfo().toPackageQualifiedName());
-      if (model != null && model instanceof HaxePackageModel) {
+      if (model instanceof HaxePackageModel) {
         return (HaxePackageModel)model;
       }
     }

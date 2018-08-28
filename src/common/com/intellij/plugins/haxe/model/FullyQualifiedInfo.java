@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2017 Ilya Malanin
+ * Copyright 2017-2018 Ilya Malanin
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package com.intellij.plugins.haxe.model;
 
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.plugins.haxe.lang.psi.HaxeReferenceExpression;
 import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.Nullable;
@@ -88,6 +89,36 @@ public class FullyQualifiedInfo {
         memberName = i < size ? parts.get(i) : null;
       }
     }
+  }
+
+  public static String getRelativeQualifiedName(HaxeModel model, HaxeModel relativeModel) {
+    FullyQualifiedInfo relativeInfo = relativeModel.getQualifiedInfo();
+    FullyQualifiedInfo info = model.getQualifiedInfo();
+    if (relativeInfo != null &&
+        info != null &&
+        Objects.equals(relativeInfo.packagePath, info.packagePath) &&
+        Objects.equals(relativeInfo.fileName, info.fileName)) {
+      final String relativePath = relativeInfo.getPresentableText();
+      final String path = info.getPresentableText();
+      int commonPrefixLength = StringUtil.commonPrefixLength(relativePath, path);
+      if (commonPrefixLength > 0) {
+        if (relativePath.charAt(commonPrefixLength-1) != '.') {
+          commonPrefixLength = relativePath.substring(0, commonPrefixLength).lastIndexOf('.')+1;
+        }
+        return path.substring(commonPrefixLength);
+      }
+    }
+    if (info != null) return info.getPresentableText();
+    return model.getName();
+  }
+
+  public static String getQualifiedName(HaxeModel model) {
+    FullyQualifiedInfo info = model.getQualifiedInfo();
+    if (info != null) {
+      return info.getPresentableText();
+    }
+
+    return model.getName();
   }
 
   @Override
